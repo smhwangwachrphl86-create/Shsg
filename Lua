@@ -1,0 +1,471 @@
+-- Services
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local camera = Workspace.CurrentCamera
+
+-- ป้องกัน UI ซ้ำซ้อน
+if playerGui:FindFirstChild("FrameHubFinalGod") then playerGui.FrameHubFinalGod:Destroy() end
+if playerGui:FindFirstChild("FrameHubLoading") then playerGui.FrameHubLoading:Destroy() end
+
+local config = {
+    HitboxFOVEnabled = false,
+    ESPEnabled = false,
+    FOVRadius = 150,
+    HitboxSize = 5,
+    AutoFarm = false,
+    MurdererLockEnabled = false,
+    ShowFOVCircle = true
+}
+
+local originalSizes = {}
+
+-- ================= 1. หน้าจอโหลด UI (Loading Screen) =================
+local loadGui = Instance.new("ScreenGui", playerGui)
+loadGui.Name = "FrameHubLoading"
+loadGui.ResetOnSpawn = false
+
+local loadFrame = Instance.new("Frame", loadGui)
+loadFrame.Size = UDim2.new(0, 360, 0, 180)
+loadFrame.Position = UDim2.new(0.5, -180, 0.5, -90)
+loadFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+loadFrame.BorderSizePixel = 0
+Instance.new("UICorner", loadFrame).CornerRadius = UDim.new(0, 12)
+
+local loadStroke = Instance.new("UIStroke", loadFrame)
+loadStroke.Color = Color3.fromRGB(255, 100, 200)
+loadStroke.Thickness = 1.5
+
+local hubTitle = Instance.new("TextLabel", loadFrame)
+hubTitle.Size = UDim2.new(1, 0, 0, 40)
+hubTitle.Position = UDim2.new(0, 0, 0, 20)
+hubTitle.BackgroundTransparency = 1
+hubTitle.Text = "MM2 ULTIMATE <font color='#FF64C8'>| HUB</font>"
+hubTitle.RichText = true
+hubTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+hubTitle.TextSize = 20
+hubTitle.Font = Enum.Font.GothamBold
+
+local downloadText = Instance.new("TextLabel", loadFrame)
+downloadText.Size = UDim2.new(1, -40, 0, 20)
+downloadText.Position = UDim2.new(0, 20, 0, 75)
+downloadText.BackgroundTransparency = 1
+downloadText.Text = "กำลังโหลดระบบ Ultimate All-in-One..."
+downloadText.TextColor3 = Color3.fromRGB(180, 180, 190)
+downloadText.TextSize = 12
+downloadText.Font = Enum.Font.GothamMedium
+downloadText.TextXAlignment = Enum.TextXAlignment.Left
+
+local barBg = Instance.new("Frame", loadFrame)
+barBg.Size = UDim2.new(1, -40, 0, 8)
+barBg.Position = UDim2.new(0, 20, 0, 105)
+barBg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+barBg.BorderSizePixel = 0
+Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
+
+local barFill = Instance.new("Frame", barBg)
+barFill.Size = UDim2.new(0, 0, 1, 0)
+barFill.BackgroundColor3 = Color3.fromRGB(255, 100, 200)
+barFill.BorderSizePixel = 0
+Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
+
+local percentLabel = Instance.new("TextLabel", loadFrame)
+percentLabel.Size = UDim2.new(1, -40, 0, 20)
+percentLabel.Position = UDim2.new(0, 20, 0, 120)
+percentLabel.BackgroundTransparency = 1
+percentLabel.Text = "0%"
+percentLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
+percentLabel.TextSize = 12
+percentLabel.Font = Enum.Font.GothamBold
+percentLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+-- ================= 2. สร้างหน้าต่าง UI หลัก =================
+local screenGui = Instance.new("ScreenGui", playerGui)
+screenGui.Name = "FrameHubFinalGod"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+
+-- วงกลม FOV ตรงกลางหน้าจอเป๊ะๆ และขยับไม่ได้
+local fovCircle = Instance.new("Frame", screenGui)
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, config.FOVRadius * 2, 0, config.FOVRadius * 2)
+fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Visible = true
+fovCircle.BorderSizePixel = 0
+fovCircle.Active = false
+fovCircle.Draggable = false
+
+local fovCorner = Instance.new("UICorner", fovCircle)
+fovCorner.CornerRadius = UDim.new(1, 0)
+
+local fovStroke = Instance.new("UIStroke", fovCircle)
+fovStroke.Color = Color3.fromRGB(255, 100, 200)
+fovStroke.Thickness = 1.5
+
+-- ปุ่มเปิด/ปิด เมนูหลัก (ย้ายตำแหน่งได้เฉพาะปุ่มนี้)
+local toggleBtn = Instance.new("TextButton", screenGui)
+toggleBtn.Name = "ToggleBtn"
+toggleBtn.Size = UDim2.new(0, 42, 0, 42)
+toggleBtn.Position = UDim2.new(0, 25, 0.5, -21)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+toggleBtn.Text = "🎯"
+toggleBtn.TextSize = 18
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.AutoButtonColor = false
+toggleBtn.Visible = false
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
+
+local toggleStroke = Instance.new("UIStroke", toggleBtn)
+toggleStroke.Color = Color3.fromRGB(255, 100, 200)
+toggleStroke.Thickness = 1.5
+
+-- ระบบลากปุ่มเปิด/ปิด
+local dragging, dragInput, dragStart, startPos
+toggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = toggleBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+toggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        toggleBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- หน้าต่างหลัก
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 400, 0, 300)
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Visible = false
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
+
+local mainStroke = Instance.new("UIStroke", mainFrame)
+mainStroke.Color = Color3.fromRGB(45, 45, 55)
+mainStroke.Thickness = 1.5
+
+-- Sidebar
+local sidebar = Instance.new("ScrollingFrame", mainFrame)
+sidebar.Size = UDim2.new(0, 110, 1, -10)
+sidebar.Position = UDim2.new(0, 5, 0, 5)
+sidebar.BackgroundTransparency = 1
+sidebar.BorderSizePixel = 0
+sidebar.ScrollBarThickness = 0
+
+-- Content Area
+local contentArea = Instance.new("Frame", mainFrame)
+contentArea.Size = UDim2.new(1, -125, 1, -10)
+contentArea.Position = UDim2.new(0, 120, 0, 5)
+contentArea.BackgroundTransparency = 1
+
+local function createTab(name)
+    local tabContent = Instance.new("ScrollingFrame", contentArea)
+    tabContent.Size = UDim2.new(1, 0, 1, 0)
+    tabContent.BackgroundTransparency = 1
+    tabContent.BorderSizePixel = 0
+    tabContent.ScrollBarThickness = 2
+    tabContent.Visible = false
+    
+    local layout = Instance.new("UIListLayout", tabContent)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 4)
+
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        tabContent.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+    end)
+
+    local tabBtn = Instance.new("TextButton", sidebar)
+    tabBtn.Size = UDim2.new(1, 0, 0, 28)
+    tabBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    tabBtn.Text = name
+    tabBtn.TextColor3 = Color3.fromRGB(150, 150, 160)
+    tabBtn.TextSize = 11
+    tabBtn.Font = Enum.Font.GothamSemibold
+    Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
+
+    tabBtn.MouseButton1Click:Connect(function()
+        for _, child in pairs(contentArea:GetChildren()) do
+            if child:IsA("ScrollingFrame") then child.Visible = false end
+        end
+        tabContent.Visible = true
+    end)
+
+    if #contentArea:GetChildren() <= 1 then
+        tabContent.Visible = true
+        tabBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 200)
+        tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+
+    return tabContent
+end
+
+local function addToggle(tab, text, defaultState, callback)
+    local toggled = defaultState
+    local frame = Instance.new("TextButton", tab)
+    frame.Size = UDim2.new(1, -5, 0, 32)
+    frame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    frame.Text = ""
+    frame.AutoButtonColor = false
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1, -45, 1, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(230, 230, 240)
+    label.TextSize = 11
+    label.Font = Enum.Font.GothamMedium
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local toggleBox = Instance.new("Frame", frame)
+    toggleBox.Size = UDim2.new(0, 32, 0, 16)
+    toggleBox.Position = UDim2.new(1, -38, 0.5, -8)
+    toggleBox.BackgroundColor3 = toggled and Color3.fromRGB(255, 100, 200) or Color3.fromRGB(35, 35, 45)
+    Instance.new("UICorner", toggleBox).CornerRadius = UDim.new(1, 0)
+
+    local circle = Instance.new("Frame", toggleBox)
+    circle.Size = UDim2.new(0, 12, 0, 12)
+    circle.Position = toggled and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+    circle.BackgroundColor3 = toggled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 150, 160)
+    Instance.new("UICorner", circle).CornerRadius = UDim.new(1, 0)
+
+    frame.MouseButton1Click:Connect(function()
+        toggled = not toggled
+        if toggled then
+            TweenService:Create(toggleBox, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 200)}):Play()
+            TweenService:Create(circle, TweenInfo.new(0.2), {Position = UDim2.new(1, -14, 0.5, -6), BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+        else
+            TweenService:Create(toggleBox, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}):Play()
+            TweenService:Create(circle, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 160)}):Play()
+        end
+        if callback then pcall(function() callback(toggled) end) end
+    end)
+end
+
+local function addButton(tab, text, callback)
+    local frame = Instance.new("TextButton", tab)
+    frame.Size = UDim2.new(1, -5, 0, 32)
+    frame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    frame.Text = "  " .. text
+    frame.TextColor3 = Color3.fromRGB(230, 230, 240)
+    frame.TextSize = 11
+    frame.Font = Enum.Font.GothamMedium
+    frame.TextXAlignment = Enum.TextXAlignment.Left
+    frame.AutoButtonColor = false
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+
+    frame.MouseButton1Click:Connect(function()
+        if callback then pcall(callback) end
+    end)
+end
+
+-- สร้าง Tabs
+local mm2Tab = createTab("🔪 MM2 Hub")
+local mainTab = createTab("🎯 Main")
+local spawnerTab = createTab("🎁 Spawner")
+
+-- ฟังก์ชันเช็คฆาตรกร
+local function isMurderer(p)
+    if p and p.Character then
+        if p.Character:FindFirstChild("Knife") or p.Backpack:FindFirstChild("Knife") then
+            return true
+        end
+    end
+    return false
+end
+
+-- ระบบ ESP บทบาท (ฆาตรกรสีแดง, นายอำเภอสีน้ำเงิน, คนธรรมดาสีเขียว)
+local function updateEspTags()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("Head") then
+            local head = p.Character.Head
+            local billboard = head:FindFirstChild("RoleESPBillTag")
+            
+            if config.ESPEnabled then
+                if not billboard then
+                    billboard = Instance.new("BillboardGui")
+                    billboard.Name = "RoleESPBillTag"
+                    billboard.Size = UDim2.new(0, 200, 0, 50)
+                    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                    billboard.AlwaysOnTop = true
+                    billboard.Parent = head
+                    
+                    local txtLabel = Instance.new("TextLabel", billboard)
+                    txtLabel.Name = "TagText"
+                    txtLabel.Size = UDim2.new(1, 0, 1, 0)
+                    txtLabel.BackgroundTransparency = 1
+                    txtLabel.TextStrokeTransparency = 0.5
+                    txtLabel.TextSize = 14
+                    txtLabel.Font = Enum.Font.GothamBold
+                end
+                
+                -- ค่าเริ่มต้น คนธรรมดา สีเขียว
+                local role = "Innocent 🟢"
+                local roleColor = Color3.fromRGB(0, 255, 0)
+                
+                if p.Character:FindFirstChild("Gun") or p.Backpack:FindFirstChild("Gun") then
+                    role = "Sheriff 🔵"
+                    roleColor = Color3.fromRGB(0, 120, 255) -- สีน้ำเงิน
+                elseif isMurderer(p) then
+                    role = "Murderer 🔴"
+                    roleColor = Color3.fromRGB(255, 0, 0) -- สีแดง
+                end
+                
+                local tagText = billboard:FindFirstChild("TagText")
+                if tagText then
+                    tagText.Text = p.Name .. "\n[" .. role .. "]"
+                    tagText.TextColor3 = roleColor
+                end
+            else
+                if billboard then billboard:Destroy() end
+            end
+        end
+    end
+end
+
+-- MM2 Tab
+addToggle(mm2Tab, "🪙 ออโต้ฟาร์มเหรียญ", false, function(state)
+    config.AutoFarm = state
+    task.spawn(function()
+        while config.AutoFarm do
+            task.wait(0.5)
+            pcall(function()
+                local coinContainer = Workspace:FindFirstChild("CoinContainer")
+                if coinContainer then
+                    for _, coin in ipairs(coinContainer:GetChildren()) do
+                        if not config.AutoFarm then break end
+                        if coin:IsA("BasePart") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                            player.Character.HumanoidRootPart.CFrame = coin.CFrame
+                            task.wait(0.2)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end)
+
+addToggle(mm2Tab, "👁️ ESP ชื่อ + บทบาทบนหัว", false, function(state)
+    config.ESPEnabled = state
+    if not state then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character and p.Character:FindFirstChild("Head") then
+                local tag = p.Character.Head:FindFirstChild("RoleESPBillTag")
+                if tag then tag:Destroy() end
+            end
+        end
+    end
+end)
+
+-- Main Tab
+addToggle(mainTab, "💥 ขยาย Hitbox", false, function(state)
+    config.HitboxFOVEnabled = state
+end)
+
+addToggle(mainTab, "🎯 ล็อคเป้าเฉพาะฆาตรกร (FOV Lock)", false, function(state)
+    config.MurdererLockEnabled = state
+end)
+
+addToggle(mainTab, "⭕ แสดงวงกลม FOV ตรงกลาง", true, function(state)
+    config.ShowFOVCircle = state
+    fovCircle.Visible = state
+end)
+
+-- Spawner Tab
+addButton(spawnerTab, "📦 เสกไอเทมทั้งหมด", function()
+    pcall(function()
+        local backpack = player:FindFirstChildOfClass("Backpack")
+        if not backpack then return end
+        local function give(folder)
+            if not folder then return end
+            for _, item in pairs(folder:GetDescendants()) do
+                if item:IsA("Tool") then item:Clone().Parent = backpack end
+            end
+        end
+        give(ReplicatedStorage)
+        give(ServerStorage)
+    end)
+end)
+
+-- ลูปหลักการทำงาน
+RunService.RenderStepped:Connect(function()
+    pcall(function()
+        if config.ESPEnabled then
+            updateEspTags()
+        end
+        
+        if config.HitboxFOVEnabled then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local rootPart = p.Character.HumanoidRootPart
+                    if not originalSizes[rootPart] then originalSizes[rootPart] = rootPart.Size end
+                    rootPart.Size = Vector3.new(config.HitboxSize, config.HitboxSize, config.HitboxSize)
+                    rootPart.Transparency = 1
+                    rootPart.CanCollide = false
+                end
+            end
+        end
+
+        -- ระบบล็อคเฉพาะฆาตรกรภายในวงกลม FOV ตรงกลางหน้าจอเท่านั้น
+        if config.MurdererLockEnabled then
+            local viewportSize = camera.ViewportSize
+            local centerScreen = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+            
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and isMurderer(p) and p.Character and p.Character:FindFirstChild("Head") then
+                    local head = p.Character.Head
+                    local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
+                    local distance = (Vector2.new(screenPos.X, screenPos.Y) - centerScreen).Magnitude
+                    
+                    if onScreen and distance <= config.FOVRadius then
+                        camera.CFrame = CFrame.new(camera.CFrame.Position, head.Position)
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+-- รันหลอดโหลด UI
+task.spawn(function()
+    for i = 0, 100, 20 do
+        barFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        percentLabel.Text = i .. "%"
+        task.wait(0.05)
+    end
+    task.wait(0.2)
+    loadGui:Destroy()
+    toggleBtn.Visible = true
+end)
+
+-- เปิด/ปิดหน้าต่างหลัก
+local isOpen = false
+toggleBtn.MouseButton1Click:Connect(function()
+    isOpen = not isOpen
+    mainFrame.Visible = isOpen
+end)
